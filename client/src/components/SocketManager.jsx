@@ -7,7 +7,7 @@ import { io } from "socket.io-client";
 //   import.meta.env.VITE_SERVER_URL || "https://starkshoot.fun:3000"
 // );
 
-export const socket = io("https://195.35.20.212:3000", {
+export const socket = io("https://starkshoot.fun:2053", {
   secure: true,
   timeout: 10000, // Increase the timeout to 10 seconds
   transports: ['websocket', 'polling']

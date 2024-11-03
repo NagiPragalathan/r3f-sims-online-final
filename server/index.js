@@ -1,20 +1,34 @@
 import fs from "fs";
+import https from "https";
 import pathfinding from "pathfinding";
 import { Server } from "socket.io";
 
-const origin = process.env.CLIENT_URL || "http://localhost:5173";
-const io = new Server({
+// Load SSL certificates for HTTPS
+const options = {
+  key: fs.readFileSync('/etc/letsencrypt/live/starkshoot.fun/privkey.pem'),  // Replace with your SSL key path
+  cert: fs.readFileSync('/etc/letsencrypt/live/starkshoot.fun/fullchain.pem') // Replace with your SSL certificate path
+};
+
+// Create an HTTPS server
+const httpsServer = https.createServer(options, (req, res) => {
+  res.writeHead(200);
+  res.end("Server is running securely with HTTPS");
+});
+
+// Initialize Socket.io with the HTTPS server
+const origin = "*";
+const io = new Server(httpsServer, {
   cors: {
     origin,
   },
 });
 
-io.listen(3000);
-
-console.log("Server started on port 3000, allowed cors origin: " + origin);
+// Listen on port 3000 (adjust port as needed)
+httpsServer.listen(3000, () => {
+  console.log("Secure server started on port 3000, allowed CORS origin: " + origin);
+});
 
 // PATHFINDING UTILS
-
 const finder = new pathfinding.AStarFinder({
   allowDiagonal: true,
   dontCrossCorners: true,
@@ -27,7 +41,6 @@ const findPath = (room, start, end) => {
 };
 
 const updateGrid = (room) => {
-  // RESET GRID FOR ROOM
   for (let x = 0; x < room.size[0] * room.gridDivision; x++) {
     for (let y = 0; y < room.size[1] * room.gridDivision; y++) {
       room.grid.setWalkableAt(x, y, true);
@@ -38,17 +51,11 @@ const updateGrid = (room) => {
     if (item.walkable || item.wall) {
       return;
     }
-    const width =
-      item.rotation === 1 || item.rotation === 3 ? item.size[1] : item.size[0];
-    const height =
-      item.rotation === 1 || item.rotation === 3 ? item.size[0] : item.size[1];
+    const width = item.rotation === 1 || item.rotation === 3 ? item.size[1] : item.size[0];
+    const height = item.rotation === 1 || item.rotation === 3 ? item.size[0] : item.size[1];
     for (let x = 0; x < width; x++) {
       for (let y = 0; y < height; y++) {
-        room.grid.setWalkableAt(
-          item.gridPosition[0] + x,
-          item.gridPosition[1] + y,
-          false
-        );
+        room.grid.setWalkableAt(item.gridPosition[0] + x, item.gridPosition[1] + y, false);
       }
     }
   });
@@ -74,14 +81,11 @@ const loadRooms = async () => {
   data.forEach((roomItem) => {
     const room = {
       ...roomItem,
-      size: [7, 7], // HARDCODED FOR SIMPLICITY PURPOSES
+      size: [7, 7],
       gridDivision: 2,
       characters: [],
     };
-    room.grid = new pathfinding.Grid(
-      room.size[0] * room.gridDivision,
-      room.size[1] * room.gridDivision
-    );
+    room.grid = new pathfinding.Grid(room.size[0] * room.gridDivision, room.size[1] * room.gridDivision);
     updateGrid(room);
     rooms.push(room);
   });
@@ -90,9 +94,7 @@ const loadRooms = async () => {
 loadRooms();
 
 // UTILS
-
 const generateRandomPosition = (room) => {
-  // TO AVOID INFINITE LOOP WE LIMIT TO 100, BEST WOULD BE TO CHECK IF THERE IS ENOUGH SPACE LEFT 🤭
   for (let i = 0; i < 100; i++) {
     const x = Math.floor(Math.random() * room.size[0] * room.gridDivision);
     const y = Math.floor(Math.random() * room.size[1] * room.gridDivision);
@@ -103,7 +105,6 @@ const generateRandomPosition = (room) => {
 };
 
 // SOCKET MANAGEMENT
-
 io.on("connection", (socket) => {
   try {
     let room = null;
@@ -161,10 +162,7 @@ io.on("connection", (socket) => {
         return;
       }
       socket.leave(room.id);
-      room.characters.splice(
-        room.characters.findIndex((character) => character.id === socket.id),
-        1
-      );
+      room.characters.splice(room.characters.findIndex((character) => character.id === socket.id), 1);
       onRoomUpdate();
       room = null;
     });
@@ -211,7 +209,7 @@ io.on("connection", (socket) => {
         return;
       }
       if (!items || items.length === 0) {
-        return; // security
+        return;
       }
       room.items = items;
       updateGrid(room);
@@ -234,16 +232,13 @@ io.on("connection", (socket) => {
     socket.on("disconnect", () => {
       console.log("User disconnected");
       if (room) {
-        room.characters.splice(
-          room.characters.findIndex((character) => character.id === socket.id),
-          1
-        );
+        room.characters.splice(room.characters.findIndex((character) => character.id === socket.id), 1);
         onRoomUpdate();
         room = null;
       }
     });
   } catch (ex) {
-    console.log(ex); // Big try catch to avoid crashing the server (best would be to handle all errors properly...)
+    console.log(ex);
   }
 });
 
